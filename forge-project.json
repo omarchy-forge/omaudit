@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "projectType": "cli",
+  "tagline": "See what an Omarchy plugin can reach before you install it.",
+  "previewPath": "assets/preview.png",
+  "compatibility": ["omarchy-4"],
+  "featured": true,
+  "order": 20
+}

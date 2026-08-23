@@ -4,7 +4,7 @@ Fixtures against real plugin code, not an author's imagination of real code.
 Vendored from the marketplace census (see each fixture's SOURCE.md for the
 upstream repo, pinned commit, and license). Chosen to cover the common
 shapes an author actually writes: a Process-using bar widget, a FileView
-config reader, a network fetcher, a service plugin, a plugin with no
+config reader, a network fetcher, a service plugin, a bar bridge user,
 capabilities at all, and a real fs.sensitive + net.outbound composition.
 """
 from pathlib import Path
@@ -48,11 +48,17 @@ def test_service_plugin():
     assert set(doc["undeclared"]) == {"ipc.omarchy"}
 
 
-def test_clean_plugin_only_draws():
+def test_bar_run_is_execution_and_shell_ipc():
     doc = _audit(FIXTURES / "real-workspaces-jap")
     assert doc["manifest"]["valid"]
-    assert doc["verdict"]["grade"] == "A"
-    assert doc["capabilities"] == {}
+    assert doc["capabilities"]["process.exec"]["observed"]
+    assert doc["capabilities"]["ipc.omarchy"]["observed"]
+
+
+def test_bar_shell_bridge_is_detected():
+    doc = _audit(FIXTURES / "real-omarqui")
+    rules = {ev["rule"] for ev in doc["capabilities"]["ipc.omarchy"]["evidence"]}
+    assert "ipc.bar-shell" in rules
 
 
 def test_composition_risk_credentials_to_network():

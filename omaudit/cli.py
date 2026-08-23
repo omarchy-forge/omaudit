@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import tempfile
+from importlib.metadata import PackageNotFoundError, version
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from . import registry as registry_mod
 from . import report as report_mod
 from .capabilities import CAPABILITIES
 from .scan import scan
-from .source import clone, current_commit, find_plugin_roots, rmtree_force
+from .source import clone, current_commit, find_plugin_roots, parse_spec, rmtree_force
 
 GRADE_ORDER = ["A", "B", "C", "D", "F"]
 
@@ -24,6 +25,13 @@ EXIT_OK = 0
 EXIT_FINDINGS = 1
 EXIT_MANIFEST = 2
 EXIT_USAGE = 3
+
+
+def package_version() -> str:
+    try:
+        return version("omaudit")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def _audit(plugin_dir: Path) -> dict:
@@ -262,6 +270,11 @@ def cmd_add(args) -> int:
                   "with --plugin\n  " + ", ".join(sorted(by_id)), file=sys.stderr)
             return EXIT_USAGE
 
+        if tmp and plugin_root != root:
+            print("omaudit: remote installation requires manifest.json at the "
+                  "repository root; scan nested plugins manually", file=sys.stderr)
+            return EXIT_USAGE
+
         doc = _audit(plugin_root)
         if not doc["manifest"]["valid"]:
             print(report_mod.human(doc))
@@ -273,13 +286,26 @@ def cmd_add(args) -> int:
             print("aborted - nothing was written")
             return EXIT_OK
 
-        return _install(args.source, doc)
+        install_source = str(plugin_root)
+        expected_commit = current_commit(root) if tmp else None
+        expected_capabilities = {
+            key for key, info in doc["capabilities"].items() if info["observed"]
+        }
+        return _install(
+            install_source,
+            doc,
+            original_source=None if args.local else args.source,
+            expected_commit=expected_commit,
+            expected_capabilities=expected_capabilities,
+        )
     finally:
         if tmp:
             rmtree_force(tmp)
 
 
-def _install(source: str, doc: dict) -> int:
+def _install(source: str, doc: dict, *, original_source: str | None = None,
+             expected_commit: str | None = None,
+             expected_capabilities: set[str] | None = None) -> int:
     plugin_id = doc["plugin"]["id"]
     try:
         # omaudit already showed the capability sheet and got confirmation
@@ -304,6 +330,32 @@ def _install(source: str, doc: dict) -> int:
         return EXIT_OK
 
     installed_doc = _audit(install_dir)
+    installed_commit = current_commit(install_dir)
+    installed_capabilities = {
+        key for key, info in installed_doc["capabilities"].items() if info["observed"]
+    }
+    if ((expected_commit and installed_commit != expected_commit) or
+            (expected_capabilities is not None and
+             installed_capabilities != expected_capabilities)):
+        print("omaudit: installed source does not match the reviewed source; "
+              "removing it without accepting a baseline", file=sys.stderr)
+        _remove_plugin(plugin_id)
+        return EXIT_FINDINGS
+
+    if original_source:
+        remote_url, _commit = parse_spec(original_source)
+        try:
+            subprocess.run(
+                ["git", "-C", str(install_dir), "remote", "set-url", "origin", remote_url],
+                check=True, capture_output=True, timeout=30,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError,
+                subprocess.TimeoutExpired):
+            print("omaudit: installed source was verified, but its update remote "
+                  "could not be restored; removing it", file=sys.stderr)
+            _remove_plugin(plugin_id)
+            return EXIT_USAGE
+
     snapshot = _write_baseline(install_dir / ".omaudit-baseline.json", installed_doc, install_dir)
     print(f"omaudit: installed {plugin_id} - accepted "
           f"{len(snapshot['acceptedCapabilities'])} capability(ies)")
@@ -656,6 +708,11 @@ def cmd_help(args) -> int:
     return EXIT_OK
 
 
+def cmd_version(args) -> int:
+    print(f"omaudit {package_version()}")
+    return EXIT_OK
+
+
 class _Parser(argparse.ArgumentParser):
     """Bare `omaudit` and `omaudit --help` show the command list, not
     argparse's default dump. Unknown commands point at `omaudit help`."""
@@ -726,6 +783,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sc = _sub(sub, "schema")
     sc.set_defaults(func=cmd_schema)
+
+    ve = sub.add_parser("version", help="show the installed version")
+    ve.set_defaults(func=cmd_version)
 
     a = _sub(sub, "add")
     a.add_argument("source", help="git URL, or a directory with --local")

@@ -3,7 +3,9 @@ import json
 from pathlib import Path
 
 from omaudit.cli import EXIT_OK, EXIT_USAGE, build_parser
-from omaudit.registry import extract, write_listing
+import pytest
+
+from omaudit.registry import RegistryError, extract, fetch, write_listing
 
 
 def _run(args_list):
@@ -43,6 +45,15 @@ def test_extract_skips_retired_and_pins_commit():
     assert [e["repo"] for e in entries] == ["https://github.com/a/keep"]
     assert stats["sources"] == 1
     assert stats["withUpstreamBaseline"] == 1
+
+
+def test_registry_fetch_rejects_non_https_without_opening(monkeypatch):
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not open")),
+    )
+    with pytest.raises(RegistryError, match="HTTPS"):
+        fetch("file:///etc/passwd")
 
 
 def test_write_listing_reports_delta(tmp_path):

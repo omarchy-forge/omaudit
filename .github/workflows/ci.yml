@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Test
+        run: python -m pytest -q
+      - name: Compile
+        run: python -m compileall -q omaudit
+      - name: Validate installer shell and safety boundary
+        run: |
+          bash -n install.sh
+          ./install.sh --help
+          ! grep -Eq '(^|[[:space:]])(sudo|pkexec)([[:space:]]|$)' install.sh
+          tests/install-script.sh
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps --wheel-dir dist
+      - name: Verify wheel installation
+        run: |
+          python -m venv /tmp/omaudit-wheel-test
+          /tmp/omaudit-wheel-test/bin/pip install --no-deps dist/*.whl
+          /tmp/omaudit-wheel-test/bin/omaudit version

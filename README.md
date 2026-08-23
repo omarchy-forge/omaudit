@@ -13,15 +13,25 @@ It is a lint, not a proof. It reports capability, not intent.
 
 ## Install
 
-With pip, so `omaudit` is on your PATH:
+Beginning with the reviewed `v0.1.0` release, install Omaudit for your user
+account with the release script. It downloads the release wheel, verifies it
+against the published SHA-256 manifest, and creates an isolated environment
+under `~/.local/share/omaudit`:
 
 ```sh
-git clone <this-repo>
-cd omaudit
-pip install -e .
+curl -fsSL https://raw.githubusercontent.com/omarchy-forge/omaudit/main/install.sh | bash
 ```
 
-(`pipx install omaudit` once it's published to PyPI — not yet.)
+After that release is published, run the same command later for an explicit
+update check. Omaudit never updates in the background. To inspect before
+running or pin the release:
+
+```sh
+curl -fsSLo /tmp/omaudit-install.sh https://raw.githubusercontent.com/omarchy-forge/omaudit/main/install.sh
+less /tmp/omaudit-install.sh
+bash /tmp/omaudit-install.sh --version v0.1.0
+rm -f /tmp/omaudit-install.sh
+```
 
 Without pip — clone the repo and run the package directly. Python 3.11+,
 no dependencies:
@@ -128,7 +138,8 @@ own repo:
 omaudit verify . --max-grade B    # non-zero exit on undeclared capabilities
 ```
 
-A ready-to-copy GitHub Action lives in `.github/workflows/omaudit.yml`.
+A ready-to-copy, release-pinned workflow lives in
+[`examples/omaudit.yml`](examples/omaudit.yml).
 
 ## Commands
 
@@ -146,6 +157,7 @@ A ready-to-copy GitHub Action lives in `.github/workflows/omaudit.yml`.
 | `omaudit permissions <dir>` | Generate a `permissions` block from the code |
 | `omaudit badge <dir>` | shields.io endpoint JSON |
 | `omaudit schema` | The capability vocabulary, machine-readable |
+| `omaudit version` | Installed Omaudit version |
 | `omaudit baseline <dir>` | Snapshot current capabilities as accepted |
 | `omaudit baseline --builtin` | Snapshot every first-party plugin (stored in `~/.config/omaudit/baselines/`) |
 
@@ -211,10 +223,11 @@ of how each leg is justified.
 
 ## The schema
 
-`omaudit` implements the capability vocabulary proposed in [`SPEC.md`](./SPEC.md)
-for upstream `manifest.json`. The proposal is one optional object, additive,
-with no runtime enforcement — the value is in the diff between what an author
-declares and what the code reaches.
+`omaudit` implements the capability vocabulary documented in
+[`docs/PERMISSIONS_SCHEMA.md`](docs/PERMISSIONS_SCHEMA.md). The optional
+`permissions` object is an Omaudit convention, not an official Omarchy manifest
+field or runtime permission system. Its value is comparing declared intent with
+what static analysis observes.
 
 ## License
 

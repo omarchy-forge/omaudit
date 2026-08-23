@@ -1,5 +1,6 @@
 """omaudit add: the install-time gate."""
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -116,6 +117,83 @@ def test_yes_installs_and_writes_baseline(tmp_path, monkeypatch, capsys):
     assert calls == [["omarchy", "plugin", "add", source, "--yes"]]
 
 
+def test_install_mismatch_is_removed_without_baseline(tmp_path, monkeypatch, capsys):
+    fake_home = tmp_path / "home"
+    plugin_id = "io.github.elynch303.fan-monitor"
+    install_dir = fake_home / ".config" / "omarchy" / "plugins" / plugin_id
+    install_dir.mkdir(parents=True)
+    for f in (FIXTURES / "real-fan-monitor").iterdir():
+        if f.suffix in (".json", ".qml"):
+            shutil.copy(f, install_dir / f.name)
+    (install_dir / "BarWidget.qml").write_text(
+        'Process { command: ["curl", "https://unexpected.example"] }\n',
+        encoding="utf-8",
+    )
+
+    calls = []
+    monkeypatch.setattr(cli.Path, "home", staticmethod(lambda: fake_home))
+    monkeypatch.setattr(cli, "current_commit", lambda _path: None)
+    monkeypatch.setattr(cli.subprocess, "run", lambda cmd, **k: calls.append(cmd) or _Ok())
+
+    reviewed = cli._audit(FIXTURES / "real-fan-monitor")
+    expected = {key for key, info in reviewed["capabilities"].items() if info["observed"]}
+    code = cli._install(
+        str(FIXTURES / "real-fan-monitor"), reviewed,
+        expected_capabilities=expected,
+    )
+    assert code == cli.EXIT_FINDINGS
+    assert not (install_dir / ".omaudit-baseline.json").exists()
+    assert ["omarchy", "plugin", "remove", plugin_id, "--yes"] in calls
+    assert "does not match" in capsys.readouterr().err
+
+
+def test_install_uses_reviewed_checkout_and_restores_remote(tmp_path, monkeypatch):
+    reviewed_repo = tmp_path / "reviewed"
+    _write_manifest(reviewed_repo, "test.reviewed")
+    subprocess.run(["git", "init", "-q", str(reviewed_repo)], check=True)
+    subprocess.run(["git", "-C", str(reviewed_repo), "add", "."], check=True)
+    subprocess.run([
+        "git", "-C", str(reviewed_repo), "-c", "user.name=Test",
+        "-c", "user.email=test@example.test", "commit", "-qm", "fixture",
+    ], check=True)
+
+    fake_home = tmp_path / "home"
+    install_dir = fake_home / ".config" / "omarchy" / "plugins" / "test.reviewed"
+    real_run = subprocess.run
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:4] == ["omarchy", "plugin", "add", str(reviewed_repo)]:
+            install_dir.parent.mkdir(parents=True)
+            return real_run(["git", "clone", "-q", str(reviewed_repo), str(install_dir)], check=True)
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(cli.Path, "home", staticmethod(lambda: fake_home))
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    doc = cli._audit(reviewed_repo)
+    expected = {key for key, info in doc["capabilities"].items() if info["observed"]}
+    commit = real_run(
+        ["git", "-C", str(reviewed_repo), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+    assert cli._install(
+        str(reviewed_repo), doc,
+        original_source="https://github.com/example/reviewed.git",
+        expected_commit=commit,
+        expected_capabilities=expected,
+    ) == cli.EXIT_OK
+    assert (install_dir / ".omaudit-baseline.json").is_file()
+    remote = real_run(
+        ["git", "-C", str(install_dir), "remote", "get-url", "origin"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert remote == "https://github.com/example/reviewed.git"
+
+
+class _Ok:
+    returncode = 0
+
+
 def test_install_summary_splits_plain_and_flagged_lines():
     from omaudit.cli import _audit
     doc = _audit(FIXTURES / "real-omarqui")
@@ -130,7 +208,7 @@ def test_install_summary_splits_plain_and_flagged_lines():
 
 def test_install_summary_no_capabilities():
     from omaudit.cli import _audit
-    doc = _audit(FIXTURES / "real-workspaces-jap")
+    doc = _audit(FIXTURES / "good-clock")
     text = install_summary(doc)
     assert "no capabilities detected" in text
 

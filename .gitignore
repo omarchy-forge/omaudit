@@ -14,7 +14,16 @@ census/
 # oh-my-claudecode runtime state — not project content
 .omc/
 
-# project notes stay local; README.md is the public front door
+# Local working notes and adjacent repositories are not product content.
 *.md
 !README.md
-
+!AGENTS.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+!DISCLOSURE.md
+!SECURITY.md
+!SPEC.md
+!docs/*.md
+!tests/fixtures/*/SOURCE.md
+builtin/
+plugin-grok/
