@@ -8,6 +8,7 @@ the census described.
 import json
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from collections import Counter
 from pathlib import Path
 
@@ -21,11 +22,28 @@ class RegistryError(Exception):
     pass
 
 
+MAX_REGISTRY_BYTES = 10_000_000
+
+
 def fetch(url: str = REGISTRY_URL) -> dict:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise RegistryError("registry URL must use HTTPS")
     req = urllib.request.Request(url, headers={"User-Agent": "omaudit-census"})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            declared = resp.headers.get("Content-Length")
+            if declared:
+                try:
+                    too_large = int(declared) > MAX_REGISTRY_BYTES
+                except ValueError as exc:
+                    raise RegistryError("registry returned an invalid Content-Length") from exc
+                if too_large:
+                    raise RegistryError("registry response exceeds 10 MB")
+            body = resp.read(MAX_REGISTRY_BYTES + 1)
+            if len(body) > MAX_REGISTRY_BYTES:
+                raise RegistryError("registry response exceeds 10 MB")
+            return json.loads(body.decode("utf-8"))
     except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
         raise RegistryError(f"could not read {url}: {exc}") from exc
 

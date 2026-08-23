@@ -4,7 +4,9 @@ This is a dated snapshot, not a live feed. `omaudit report` is what you
 installed. This is what the website is listing.
 """
 
+import hashlib
 import json
+import re
 import sys
 import tempfile
 from collections import Counter
@@ -13,7 +15,7 @@ from pathlib import Path
 from . import manifest as manifest_mod
 from . import report as report_mod
 from .scan import scan
-from .source import clone, find_plugin_roots, is_cached, rmtree_force
+from .source import clone, find_plugin_roots, is_cached, parse_spec, rmtree_force
 
 GRADES = ["A", "B", "C", "D", "F"]
 
@@ -88,7 +90,11 @@ def render(summary: dict) -> str:
 
 
 def clone_name(spec: str) -> str:
-    return spec.partition("@")[0].rstrip("/").split("/")[-1].removesuffix(".git")
+    url, _commit = parse_spec(spec)
+    stem = url.rstrip("/").split("/")[-1].removesuffix(".git")
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip(".-") or "repository"
+    digest = hashlib.sha256(spec.encode("utf-8")).hexdigest()[:12]
+    return f"{stem[:80]}-{digest}"
 
 
 def load_specs(path: Path) -> list[str]:

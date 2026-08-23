@@ -72,6 +72,9 @@ RULES: list[Rule] = [
     Rule("exec.startdetached", "process.exec",
          re.compile(r"\bstartDetached\s*\("),
          "launches a detached process"),
+    Rule("exec.bar-run", "process.exec",
+         re.compile(r"\b(?:root\.)?bar\.run\s*\("),
+         "runs a command through the Omarchy bar"),
     Rule("exec.shell-c", "process.exec",
          re.compile(r"[\"'](?:/bin/)?(?:ba|z|d)?sh[\"']\s*,\s*[\"']-c[\"']"),
          "runs an arbitrary shell command string"),
@@ -172,6 +175,12 @@ RULES: list[Rule] = [
     Rule("ipc.shell", "ipc.omarchy",
          re.compile(r"\bomarchy-shell\b|\bIpcHandler\s*\{"),
          "uses Omarchy shell IPC"),
+    Rule("ipc.bar-shell", "ipc.omarchy",
+         re.compile(r"\b(?:root\.)?bar\.shell\.[A-Za-z_][A-Za-z0-9_]*"),
+         "calls the Omarchy bar shell bridge"),
+    Rule("ipc.bar-run", "ipc.omarchy",
+         re.compile(r"\b(?:root\.)?bar\.run\s*\("),
+         "uses the Omarchy bar command bridge"),
 ]
 
 

@@ -58,13 +58,15 @@ in plain language, and asks before anything is written.
 
     Install anyway? [y/N]
 
-Yes installs via `omarchy plugin add <url> --yes` and writes
-.omaudit-baseline.json next to it, which is what `omaudit check` compares
-against later.
+Yes installs the exact reviewed checkout via `omarchy plugin add`, verifies the
+installed commit and capability set, restores the upstream update remote, and
+only then writes .omaudit-baseline.json for `omaudit check`. A mismatch is
+removed without being accepted.
 
 --local     treat the argument as an already-checked-out directory
-            (review works; install still needs a git URL)
---plugin ID pick one plugin when the source holds several
+            (installation requires that directory to be a Git repository)
+--plugin ID select one plugin for review when a source holds several;
+            remote installation still requires a root manifest
 --yes / -y  skip omaudit's confirmation (still shows the sheet)
 
 Needs the `omarchy` CLI on PATH to install. Scan-only? use `omaudit scan`.

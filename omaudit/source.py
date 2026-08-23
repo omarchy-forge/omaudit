@@ -11,7 +11,30 @@ import shutil
 import stat
 import subprocess
 import sys
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
+
+FULL_COMMIT = re.compile(r"^[0-9a-fA-F]{40}$")
+SCP_SSH = re.compile(r"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[^\s]+$")
+
+
+def parse_spec(spec: str) -> tuple[str, str | None]:
+    """Split the optional @<full-commit> suffix without breaking git@ URLs."""
+    url, marker, suffix = spec.rpartition("@")
+    if marker and FULL_COMMIT.fullmatch(suffix):
+        return url, suffix.lower()
+    return spec, None
+
+
+def safe_remote_url(url: str) -> bool:
+    """Permit network Git transports, never local paths or Git ext helpers."""
+    if not url or any(ord(char) < 32 for char in url):
+        return False
+    if SCP_SSH.fullmatch(url):
+        return True
+    parsed = urlsplit(url)
+    return parsed.scheme in {"https", "ssh"} and bool(parsed.hostname)
 
 
 def rmtree_force(path: Path) -> None:
@@ -40,7 +63,7 @@ def is_cached(spec: str, dest: Path) -> bool:
     can skip the network entirely."""
     if not dest.exists():
         return False
-    _, _, commit = spec.partition("@")
+    _, commit = parse_spec(spec)
     if commit:
         return current_commit(dest) == commit
     return (dest / ".git").is_dir()
@@ -51,7 +74,10 @@ def clone(spec: str, dest: Path) -> Path | None:
     (what census.py uses, so audits describe exactly what was listed); a
     bare url does a normal shallow clone of the default branch (what
     `omaudit add` uses, since it's installing whatever HEAD is right now)."""
-    url, _, commit = spec.partition("@")
+    url, commit = parse_spec(spec)
+    if not safe_remote_url(url):
+        print(f"  ! refusing unsafe or local git source: {url}", file=sys.stderr)
+        return None
     if dest.exists():
         if is_cached(spec, dest):
             return dest
@@ -70,7 +96,7 @@ def clone(spec: str, dest: Path) -> Path | None:
                            check=True, capture_output=True, timeout=60)
         else:
             subprocess.run(
-                ["git", "clone", "--depth", "1", "--quiet", url, str(dest)],
+                ["git", "clone", "--depth", "1", "--quiet", "--", url, str(dest)],
                 check=True, capture_output=True, timeout=180,
             )
         return dest

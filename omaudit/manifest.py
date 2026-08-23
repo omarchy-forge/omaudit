@@ -70,7 +70,8 @@ class Manifest:
 
 
 def _safe_relative(root: Path, value: str) -> bool:
-    if os.path.isabs(value) or value.startswith("~"):
+    if (not value or "\n" in value or ".." in value or os.path.isabs(value)
+            or value.startswith("~")):
         return False
     try:
         resolved = (root / value).resolve()
@@ -102,6 +103,12 @@ def load(plugin_dir: Path) -> Manifest:
             m.errors.append(f"missing required field: '{field_name}'")
 
     plugin_id = str(m.data.get("id", ""))
+    if not plugin_id:
+        m.errors.append("manifest 'id' is empty")
+    elif (not plugin_id[0].isalnum() or
+          any(char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"
+              for char in plugin_id) or ".." in plugin_id):
+        m.errors.append(f"invalid plugin id '{plugin_id}'")
     if plugin_id.startswith(RESERVED_ID_PREFIX):
         m.errors.append(f"id '{plugin_id}' uses the reserved 'omarchy.*' namespace")
     if plugin_id and "." not in plugin_id:
@@ -116,10 +123,15 @@ def load(plugin_dir: Path) -> Manifest:
         m.errors.append("'entryPoints' must be an object")
         entry_points = {}
 
+    bar_widget = m.data.get("barWidget")
+    if (isinstance(bar_widget, dict) and "defaultSection" in bar_widget and
+            bar_widget["defaultSection"] not in ("left", "center", "right")):
+        m.errors.append("'barWidget.defaultSection' must be left, center, or right")
+
     for kind in kinds:
         mapping = KIND_ENTRYPOINTS.get(kind)
         if not mapping:
-            m.errors.append(f"unknown plugin kind: '{kind}'")
+            m.warnings.append(f"unknown plugin kind is not checked: '{kind}'")
             continue
         key, _default = mapping
         if key not in entry_points:
@@ -136,6 +148,8 @@ def load(plugin_dir: Path) -> Manifest:
             m.errors.append(f"entry point file not found: '{value}'")
 
     for path in plugin_dir.rglob("*"):
+        if ".git" in path.relative_to(plugin_dir).parts:
+            continue
         if path.is_symlink():
             rel = path.relative_to(plugin_dir)
             m.errors.append(f"plugin folder contains a symlink: '{rel}'")
