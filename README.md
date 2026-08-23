@@ -13,18 +13,16 @@ It is a lint, not a proof. It reports capability, not intent.
 
 ## Install
 
-Beginning with the reviewed `v0.1.0` release, install Omaudit for your user
-account with the release script. It downloads the release wheel, verifies it
-against the published SHA-256 manifest, and creates an isolated environment
-under `~/.local/share/omaudit`:
+Install Omaudit for your user account with the release script. It downloads the
+latest release wheel, verifies it against the published SHA-256 manifest, and
+creates an isolated environment under `~/.local/share/omaudit`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/omarchy-forge/omaudit/main/install.sh | bash
 ```
 
-After that release is published, run the same command later for an explicit
-update check. Omaudit never updates in the background. To inspect before
-running or pin the release:
+Run the same command later for an explicit update check. Omaudit never updates
+in the background. To inspect before running or pin the release:
 
 ```sh
 curl -fsSLo /tmp/omaudit-install.sh https://raw.githubusercontent.com/omarchy-forge/omaudit/main/install.sh
